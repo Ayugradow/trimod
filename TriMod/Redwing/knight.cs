@@ -5,18 +5,23 @@ using HutongGames.PlayMaker.Actions;
 using ModCommon;
 using Modding;
 using UnityEngine;
+using Bounds = UnityEngine.Bounds;
 
-namespace TriMod
+namespace TriMod.Redwing
 {
-    public class RedwingKnight: MonoBehaviour
+    public class Knight : MonoBehaviour
     {
-        private GameObject Knight;
+        public static GameObject KnightGameObject;
         private tk2dSprite KnightSprite;
         private PlayMakerFSM ProxyFSM;
         private PlayMakerFSM SpellControl;
         private PlayMakerFSM NailArtControl;
+        private GameObject PillarDetectionObject;
+        public static pillardetect PillarDetection;
         private float flameStrength;
         readonly private double strengthPerSecond = 0.4;
+        public const float FP_X_RANGE = 13;
+        public const float FP_Y_RANGE = 6;
 
         private bool _isEnabled = false;
 
@@ -30,6 +35,7 @@ namespace TriMod
         public void EnableRedwing()
         {
             _isEnabled = true;
+            textures.loadAllTextures();
             ModHooks.Instance.FocusCostHook += InstanceOnFocusCostHook;
             ModHooks.Instance.BeforeAddHealthHook += InstanceOnBeforeAddHealthHook;
 
@@ -38,15 +44,17 @@ namespace TriMod
 
         private int InstanceOnBeforeAddHealthHook(int amount)
         {
-            if (amount != 2)
+            if (amount < 2)
                 return 0;
-            return 1;
+            return amount - 1;
         }
 
         public void FirePillar()
         {
             _isFocusing = false;
+            objectspawner.SpawnFirePillar(flameStrength);
             Log("Doing a firepiller of strength " + flameStrength);
+            
             
             // Firepiller code
             flameStrength = 0f;
@@ -159,13 +167,36 @@ namespace TriMod
             while (GameManager.instance == null || HeroController.instance == null)
                 yield return null;
 
-            Knight = GameObject.Find("Knight");
-            KnightSprite = Knight.GetComponent<tk2dSprite>();
-            ProxyFSM = FSMUtility.LocateFSM(Knight, "ProxyFSM");
-            SpellControl = FSMUtility.LocateFSM(Knight, "Spell Control");
-            NailArtControl = FSMUtility.LocateFSM(Knight, "Nail Arts");
+            KnightGameObject = GameObject.Find("Knight");
+            KnightSprite = KnightGameObject.GetComponent<tk2dSprite>();
+            ProxyFSM = FSMUtility.LocateFSM(KnightGameObject, "ProxyFSM");
+            SpellControl = FSMUtility.LocateFSM(KnightGameObject, "Spell Control");
+            NailArtControl = FSMUtility.LocateFSM(KnightGameObject, "Nail Arts");
+            setupFlamePillar();
+            
             Modding.Logger.LogDebug("Found Spell control and nail art control FSMs");
-            Knight.PrintSceneHierarchyTree("knight.txt");
+            //Knight.PrintSceneHierarchyTree("knight.txt");
+        }
+        
+        private void setupFlamePillar()
+        {            
+            PillarDetectionObject = new GameObject("redwingFlamePillarDetect",
+                typeof(pillardetect), typeof(Rigidbody2D), typeof(BoxCollider2D));
+            PillarDetectionObject.transform.parent = KnightGameObject.transform;
+            PillarDetectionObject.transform.localPosition = Vector3.zero;
+            
+            
+            BoxCollider2D fpRangeCollide = PillarDetectionObject.GetComponent<BoxCollider2D>();
+            Bounds bounds = fpRangeCollide.bounds;
+            bounds.center = PillarDetectionObject.transform.position;
+            fpRangeCollide.isTrigger = true;
+            fpRangeCollide.size = new Vector2(FP_X_RANGE, FP_Y_RANGE);            
+
+            Rigidbody2D fpFakePhysics = PillarDetectionObject.GetComponent<Rigidbody2D>();
+            fpFakePhysics.isKinematic = true;
+            PillarDetection = PillarDetectionObject.GetComponent<pillardetect>();
+            
+            Log("Added Flamepillar detection");
         }
         
         private static void AddAction(PlayMakerFSM fsm, string stateName, FsmStateAction action)
@@ -200,7 +231,7 @@ namespace TriMod
             }
         }
 
-        private static void Log(string message)
+        public static void Log(string message)
         {
             Modding.Logger.Log("[Trimod:Redwing] : " + message);
         }

@@ -1,6 +1,6 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "mod", "mod\mod.csproj", "{1FB05C4C-C06C-4006-8F59-97F277892B03}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TriMod", "TriMod\TriMod.csproj", "{1FB05C4C-C06C-4006-8F59-97F277892B03}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
