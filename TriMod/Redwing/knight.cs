@@ -179,12 +179,12 @@ namespace TriMod.Redwing
 
         private void InstanceOnAttackHook(AttackDirection dir)
         {
-            if (dir == AttackDirection.upward && HeroController.instance.hero_state == ActorStates.airborne && firePower > 0.25 && !_ceilingdetect.hasCelingAbove() && !_isImmortal)
+            if (dir == AttackDirection.upward && HeroController.instance.hero_state == ActorStates.airborne && firePower > 0.25 && !_isImmortal)
             {
                 firePower -= 0.25;
                 StartCoroutine(ImmortalFreezeKnight(0.7, false));
                 GhostKnight.transform.position = KnightGameObject.transform.position;
-                GhostPhysics.velocity = Vector2.up * 15f;
+                GhostPhysics.velocity = _ceilingdetect.hasCelingAbove() ? Vector2.zero : Vector2.up * 15f;
                 GhostSprite.color = Color.white;
                 StartCoroutine(TeleportToGhost(0.7));
                 StartCoroutine(fadeKnight(0.4, 0.7));
