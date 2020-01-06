@@ -55,9 +55,5 @@ namespace TriMod.Redwing
             return enemyList.Count != 0;
         }
         
-        private static void log(string str)
-        {
-            Modding.Logger.Log("[Redwing] " + str);
-        }
     }
 }

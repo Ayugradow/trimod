@@ -22,6 +22,12 @@ namespace TriMod.Redwing
                             FocusBeam[i] = loadImageFromAssembly(res);
                         }
                     }
+                } else if (res.Contains(WarpPrefix))
+                {
+                    for (int i = 0; i < WarpSprites.Length; i++)
+                    {
+                        WarpSprites[i] = loadImageFromAssembly(res);
+                    }
                 }
 
                 if (res.EndsWith("512_512.png"))
@@ -60,6 +66,15 @@ namespace TriMod.Redwing
                     FocusBeam[i] = _invalidTall;
                 }
             }
+
+            for (int i = 0; i < WarpSprites.Length; i++)
+            {
+                if (WarpSprites[i] == null )
+                {
+                    Log("No warp sprite texture for warp" + i + ".png");
+                    WarpSprites[i] = _invalidSquare;
+                }
+            }
         }
         
         private static Texture2D loadImageFromAssembly(string imageName)
@@ -81,11 +96,13 @@ namespace TriMod.Redwing
         }
         
         public static readonly Texture2D[] FocusBeam = new Texture2D[4];
+        public static readonly Texture2D[] WarpSprites = new Texture2D[8];
         private static Texture2D _invalidSquare;
         private static Texture2D _invalidTall;
         private static Texture2D _invalidShort;
         private static Texture2D _invalidVeryTall;
         private const string BeamPrefix = "focusbeam";
+        private const string WarpPrefix = "warp";
         //public const int flameLeftX = 200;
         
         private static void Log(string message)

@@ -1,10 +1,12 @@
 using System;
 using System.Collections;
+using GlobalEnums;
 using HutongGames.PlayMaker;
 using HutongGames.PlayMaker.Actions;
 using ModCommon;
 using Modding;
 using UnityEngine;
+using UnityEngine.UI;
 using Bounds = UnityEngine.Bounds;
 
 namespace TriMod.Redwing
@@ -12,24 +14,45 @@ namespace TriMod.Redwing
     public class Knight : MonoBehaviour
     {
         public static GameObject KnightGameObject;
+        public static pillardetect PillarDetection;
+
+        private GameObject GhostKnight;
+        private GameObject CeilingDetectionObject;
+        private ceilingdetect _ceilingdetect;
+        private SpriteRenderer GhostSprite;
+        private Rigidbody2D GhostPhysics;
+        private Texture2D GhostImage;
         private tk2dSprite KnightSprite;
+        private Rigidbody2D KnightPhysics;
         private PlayMakerFSM ProxyFSM;
         private PlayMakerFSM SpellControl;
         private PlayMakerFSM NailArtControl;
         private GameObject PillarDetectionObject;
-        public static pillardetect PillarDetection;
+        private GameObject FireBar;
+        private GameObject canvasObj;
+        private Image FireBarImage;
+        private double firePower;
         private float flameStrength;
         readonly private double strengthPerSecond = 0.4;
         public const float FP_X_RANGE = 13;
         public const float FP_Y_RANGE = 6;
 
         private bool _isEnabled = false;
-
         private bool _isFocusing = false;
+        private bool _isImmortal = false;
 
         private void Start()
         {
             StartCoroutine(getHeroFSMs());
+        }
+
+        private void OnDestroy()
+        {
+            Destroy(PillarDetectionObject);
+            Destroy(FireBar);
+            Destroy(canvasObj);
+            Destroy(GhostKnight);
+            Destroy(CeilingDetectionObject);
         }
 
         public void EnableRedwing()
@@ -38,8 +61,137 @@ namespace TriMod.Redwing
             textures.loadAllTextures();
             ModHooks.Instance.FocusCostHook += InstanceOnFocusCostHook;
             ModHooks.Instance.BeforeAddHealthHook += InstanceOnBeforeAddHealthHook;
+            ModHooks.Instance.AttackHook += InstanceOnAttackHook;
+            ModHooks.Instance.TakeDamageHook += ImmortalCheck;
 
+            canvasObj = CanvasUtil.CreateCanvas(RenderMode.ScreenSpaceOverlay, new Vector2(1920f, 1080f));
+            FireBar = CanvasUtil.CreateImagePanel(canvasObj,
+                Sprite.Create(Texture2D.whiteTexture, new Rect(0, 0, 1, 1), new Vector2(0.5f, 0.5f)),
+                new CanvasUtil.RectData(new Vector2(300f, 100f), new Vector2(0.9f, 0.9f),
+                    new Vector2(0.910f, 0.89f), new Vector2(0.910f, 0.89f)));
+            DontDestroyOnLoad(canvasObj);
+            DontDestroyOnLoad(FireBar);
+            
+            FireBarImage = FireBar.GetComponent<Image>();
+
+            FireBarImage.preserveAspect = false;
+            FireBarImage.type = Image.Type.Filled;
+            FireBarImage.fillMethod = Image.FillMethod.Horizontal;
+            FireBarImage.fillAmount = (float) firePower;
+            
             StartCoroutine(AddHeroHooks());
+        }
+
+        private int ImmortalCheck(ref int hazardtype, int damage)
+        {
+            if (hazardtype == 1)
+            {
+                if (_isImmortal)
+                {
+                    return 0;
+                }
+            }
+            return damage;
+        }
+
+        private void Update()
+        {
+            if (firePower < 1.0)
+            {
+                firePower += Time.deltaTime * 0.2;
+                FireBarImage.fillAmount = (float) firePower;
+            }
+            else
+            {
+                firePower = 1.0;
+                FireBarImage.fillAmount = 1.0f;
+            }
+        }
+
+        private IEnumerator ImmortalFreezeKnight(double time, bool resetVelocity)
+        {
+            _isImmortal = true;
+            Vector3 currentPos = KnightGameObject.transform.position;
+            Vector2 currentVelocity = KnightPhysics.velocity;
+            float currentGravity = KnightPhysics.gravityScale;
+            KnightPhysics.gravityScale = 0f;
+            while (time > 0.0)
+            {
+                KnightGameObject.transform.position = new Vector3(currentPos.x, KnightGameObject.transform.position.y, currentPos.z);
+                //KnightGameObject.transform.position = currentPos;
+                
+                KnightPhysics.velocity = Vector2.zero;
+                yield return null;
+                time -= Time.deltaTime;
+            }
+            _isImmortal = false;
+            KnightPhysics.velocity = resetVelocity ? currentVelocity : Vector2.zero;
+            KnightPhysics.gravityScale = currentGravity;
+        }
+
+        private IEnumerator fadeKnight(double time, double returnTime)
+        {
+            double startTime = 0.0;
+            while (startTime < time)
+            {
+                double alpha = 1 - startTime / time;
+                if (alpha < 0.0)
+                {
+                    alpha = 0.0;
+                }
+                KnightSprite.color = new Color(1f, 1f, 1f, (float) alpha);
+                yield return null;
+                startTime += Time.deltaTime;
+            }
+            KnightSprite.color = Color.clear;
+            while (startTime < returnTime)
+            {
+                yield return null;
+                startTime += Time.deltaTime;
+            }
+            KnightSprite.color = Color.white;
+        }
+
+        private IEnumerator TeleportToGhost(double time)
+        {
+            HeroController.instance.acceptingInput = false;
+            double startTime = 0;
+            int currentFrame = 0;
+            while (startTime < time)
+            {
+                if (currentFrame < (int) (textures.WarpSprites.Length * (startTime / time)))
+                {
+                    currentFrame++;
+                    GhostImage = textures.WarpSprites[currentFrame];
+                }
+                startTime += Time.deltaTime;
+                yield return null;
+            }
+
+            HeroController.instance.acceptingInput = true;
+            GhostSprite.color = Color.clear;
+            GhostImage = textures.WarpSprites[0];
+            GhostPhysics.velocity = Vector2.zero;
+            KnightGameObject.transform.position = GhostKnight.transform.position;
+            
+        }
+        
+
+        private void InstanceOnAttackHook(AttackDirection dir)
+        {
+            if (dir == AttackDirection.upward && HeroController.instance.hero_state == ActorStates.airborne && firePower > 0.25 && !_ceilingdetect.hasCelingAbove() && !_isImmortal)
+            {
+                firePower -= 0.25;
+                StartCoroutine(ImmortalFreezeKnight(0.7, false));
+                GhostKnight.transform.position = KnightGameObject.transform.position;
+                GhostPhysics.velocity = Vector2.up * 15f;
+                GhostSprite.color = Color.white;
+                StartCoroutine(TeleportToGhost(0.7));
+                StartCoroutine(fadeKnight(0.4, 0.7));
+
+                Log("You're airborne and you did an upslash enjoy your cool teleport power");
+            }
+            Log("Player attacked with direction " + dir);
         }
 
         private int InstanceOnBeforeAddHealthHook(int amount)
@@ -158,6 +310,11 @@ namespace TriMod.Redwing
             if (_isEnabled)
             {
                 ModHooks.Instance.FocusCostHook -= InstanceOnFocusCostHook;
+                Destroy(PillarDetectionObject);
+                Destroy(FireBar);
+                Destroy(canvasObj);
+                Destroy(GhostKnight);
+                Destroy(CeilingDetectionObject);
                 _isEnabled = false;
             }
         }
@@ -172,10 +329,45 @@ namespace TriMod.Redwing
             ProxyFSM = FSMUtility.LocateFSM(KnightGameObject, "ProxyFSM");
             SpellControl = FSMUtility.LocateFSM(KnightGameObject, "Spell Control");
             NailArtControl = FSMUtility.LocateFSM(KnightGameObject, "Nail Arts");
+            KnightPhysics = KnightGameObject.GetComponent<Rigidbody2D>();
             setupFlamePillar();
+            GhostKnight = new GameObject("GhostKnight", typeof(Rigidbody2D), typeof(SpriteRenderer), typeof(BoxCollider2D), typeof(ghostknight));
+            GhostKnight.layer = 0;
+            BoxCollider2D gkCollide = GhostKnight.GetComponent<BoxCollider2D>();
+            BoxCollider2D knightCollide = KnightGameObject.GetComponent<BoxCollider2D>();
+            gkCollide.size = new Vector2(knightCollide.size.x + 0.4f, knightCollide.size.y + 1.2f);
+            gkCollide.autoTiling = knightCollide.autoTiling;
+            gkCollide.edgeRadius = knightCollide.edgeRadius;
+            gkCollide.offset = new Vector2(knightCollide.offset.x, knightCollide.offset.y + 1.2f);
+            gkCollide.isTrigger = true;
+            GhostImage = GhostKnight.GetComponent<Texture2D>();
+            GhostSprite = GhostKnight.GetComponent<SpriteRenderer>();
+            GhostSprite.sprite = Sprite.Create(textures.WarpSprites[0], new Rect(0, 0, 512, 512), new Vector2(0.5f, 0.5f), 400);
+            GhostSprite.color = Color.clear;
+            GhostPhysics = GhostKnight.GetComponent<Rigidbody2D>();
+            GhostPhysics.drag = 0;
+            GhostPhysics.gravityScale = 0f;
+            GhostPhysics.simulated = true;
+            GhostPhysics.isKinematic = true;
+            GhostPhysics.interpolation = RigidbodyInterpolation2D.Interpolate;
             
+            CeilingDetectionObject = new GameObject("CeilingDetect", typeof(Rigidbody2D), typeof(SpriteRenderer), typeof(BoxCollider2D), typeof(ceilingdetect));
+            CeilingDetectionObject.transform.parent = KnightGameObject.transform;
+            CeilingDetectionObject.transform.localPosition = new Vector3(0, 1.5f, 0);
+            _ceilingdetect = CeilingDetectionObject.GetComponent<ceilingdetect>();
+            BoxCollider2D cdCollider2D = CeilingDetectionObject.GetComponent<BoxCollider2D>();
+            cdCollider2D.size = new Vector2(1f, 3f);
+            Bounds bounds = cdCollider2D.bounds;
+            bounds.center = CeilingDetectionObject.transform.position;
+            cdCollider2D.isTrigger = true;
+            Rigidbody2D cdFakePhysics = CeilingDetectionObject.GetComponent<Rigidbody2D>();
+            cdFakePhysics.isKinematic = true;
+
+            GhostKnight.layer = 0;
+            DontDestroyOnLoad(GhostKnight);
+            DontDestroyOnLoad(CeilingDetectionObject);
             Modding.Logger.LogDebug("Found Spell control and nail art control FSMs");
-            //Knight.PrintSceneHierarchyTree("knight.txt");
+            //KnightGameObject.PrintSceneHierarchyTree("knight.txt");
         }
         
         private void setupFlamePillar()
