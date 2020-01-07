@@ -21,7 +21,24 @@ namespace TriMod.Redwing
             if (rb.velocity.y > 0)
             {
                 StartCoroutine(slashKeyDetect());
+                StartCoroutine(moveWhileActive());
             }
+        }
+
+        private IEnumerator moveWhileActive()
+        {
+            while (rb.velocity.y > 0)
+            {
+                if (GameManager.instance.inputHandler.inputActions.left.State)
+                {
+                    rb.velocity = new Vector2(-10f, rb.velocity.y);
+                } else if (GameManager.instance.inputHandler.inputActions.right.State)
+                {
+                    rb.velocity = new Vector2(10f, rb.velocity.y);
+                }
+                yield return null;
+            }
+            rb.velocity = Vector2.zero;
         }
 
         private IEnumerator slashKeyDetect()

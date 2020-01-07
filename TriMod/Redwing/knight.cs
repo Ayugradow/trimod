@@ -151,14 +151,18 @@ namespace TriMod.Redwing
             }
             KnightSprite.color = Color.white;
         }
-
+        
         private IEnumerator TeleportToGhost(double time)
         {
             HeroController.instance.acceptingInput = false;
             double startTime = 0;
             int currentFrame = 0;
+            ReflectionHelper.SetAttr<CameraTarget, Transform>(GameManager.instance.cameraCtrl.camTarget,
+                "heroTransform", GhostKnight.transform);
             while (startTime < time)
             {
+                //CameraController.transform.position = (GhostKnight.transform.position - KnightGameObject.transform.position);
+                //GameManager.instance.cameraCtrl.mode = global::CameraController.CameraMode.FROZEN;
                 if (currentFrame < (int) (textures.WarpSprites.Length * (startTime / time)))
                 {
                     currentFrame++;
@@ -173,7 +177,8 @@ namespace TriMod.Redwing
             GhostImage = textures.WarpSprites[0];
             GhostPhysics.velocity = Vector2.zero;
             KnightGameObject.transform.position = GhostKnight.transform.position;
-            
+            ReflectionHelper.SetAttr<CameraTarget, Transform>(GameManager.instance.cameraCtrl.camTarget,
+                "heroTransform", KnightGameObject.transform);
         }
         
 
@@ -367,7 +372,8 @@ namespace TriMod.Redwing
             DontDestroyOnLoad(GhostKnight);
             DontDestroyOnLoad(CeilingDetectionObject);
             Modding.Logger.LogDebug("Found Spell control and nail art control FSMs");
-            //KnightGameObject.PrintSceneHierarchyTree("knight.txt");
+            //CameraController = GameObject.Find("CameraParent");
+            Modding.ReflectionHelper.CacheFields<CameraTarget>();
         }
         
         private void setupFlamePillar()
