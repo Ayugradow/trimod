@@ -36,7 +36,12 @@ namespace TriMod.Redwing
         readonly private double strengthPerSecond = 0.4;
         public const float FP_X_RANGE = 13;
         public const float FP_Y_RANGE = 6;
+        private float _maxfallspeed = -5f;
 
+
+        private bool _jetpackCycle = false;
+        private bool _startedJetpack = false;
+        private bool _isUpSlashing = false;
         private bool _isEnabled = false;
         private bool _isFocusing = false;
         private bool _isImmortal = false;
@@ -63,6 +68,11 @@ namespace TriMod.Redwing
             ModHooks.Instance.BeforeAddHealthHook += InstanceOnBeforeAddHealthHook;
             ModHooks.Instance.AttackHook += InstanceOnAttackHook;
             ModHooks.Instance.TakeDamageHook += ImmortalCheck;
+            ModHooks.Instance.CharmUpdateHook += RedwingLance;
+            ModHooks.Instance.DashPressedHook += NoDashWhileHoldingUp;
+            On.HeroController.JumpReleased += NoVelocityResetOnReleaseWithJetpack;
+            On.NailSlash.StartSlash += NailSlashOnStartSlash;
+            On.HeroController.ResetAirMoves += AlsoResetJetpackCycle;
 
             canvasObj = CanvasUtil.CreateCanvas(RenderMode.ScreenSpaceOverlay, new Vector2(1920f, 1080f));
             FireBar = CanvasUtil.CreateImagePanel(canvasObj,
@@ -78,8 +88,59 @@ namespace TriMod.Redwing
             FireBarImage.type = Image.Type.Filled;
             FireBarImage.fillMethod = Image.FillMethod.Horizontal;
             FireBarImage.fillAmount = (float) firePower;
-            
             StartCoroutine(AddHeroHooks());
+        }
+
+        private void AlsoResetJetpackCycle(On.HeroController.orig_ResetAirMoves orig, HeroController self)
+        {
+            _jetpackCycle = false;
+            _startedJetpack = false;
+            orig(self);
+        }
+
+        private void NoVelocityResetOnReleaseWithJetpack(On.HeroController.orig_JumpReleased orig, HeroController self)
+        {
+            if (!_jetpackCycle)
+            {
+                orig(self);
+            }
+        }
+
+        private bool NoDashWhileHoldingUp()
+        {
+            _startedJetpack = (GameManager.instance.inputHandler.inputActions.up.State && HeroController.instance.hero_state == ActorStates.airborne && !GameManager.instance.inputHandler.inputActions.jump);
+            return (GameManager.instance.inputHandler.inputActions.up.State && HeroController.instance.hero_state == ActorStates.airborne);
+        }
+
+        private void NailSlashOnStartSlash(On.NailSlash.orig_StartSlash orig, NailSlash self)
+        {
+            //Log("Nail slash on start slash run...");
+            //NailSlash
+            if (_isUpSlashing)
+            {
+                self.scale.x = 0.9f;
+                self.scale.y = 2.2f;
+            }
+            else
+            {
+                self.scale.x = 2.2f;
+                self.scale.y = 0.9f;
+            }
+            ReflectionHelper.SetAttr(self, "mantis", false);
+            ReflectionHelper.SetAttr(self, "longnail", false);
+            ReflectionHelper.SetAttr(self, "fury", false);
+            orig(self);
+        }
+
+        private void RedwingLance(PlayerData data, HeroController controller)
+        {
+            HeroController.instance.ATTACK_DURATION = 0.35f * 2f;
+            HeroController.instance.ATTACK_DURATION_CH = 0.25f * 2f;
+            HeroController.instance.ATTACK_COOLDOWN_TIME = 0.41f * 2f;
+            HeroController.instance.ATTACK_COOLDOWN_TIME_CH = 0.25f * 2f;
+            HeroController.instance.BOUNCE_VELOCITY = 12f / 1.5f;
+            HeroController.instance.BOUNCE_TIME = 0.25f * 2f;
+            //Log("Bounce heights are " + HeroController.instance.BOUNCE_VELOCITY + " for time " + HeroController.instance.BOUNCE_TIME);
         }
 
         private int ImmortalCheck(ref int hazardtype, int damage)
@@ -96,15 +157,55 @@ namespace TriMod.Redwing
 
         private void Update()
         {
-            if (firePower < 1.0)
+            if (HeroController.instance.hero_state == ActorStates.airborne)
+            {
+                if (GameManager.instance.inputHandler.inputActions.up.State && KnightPhysics.velocity.y < _maxfallspeed)
+                {
+                    KnightPhysics.velocity = new Vector2(KnightPhysics.velocity.x, _maxfallspeed);
+                    HeroController.instance.ResetHardLandingTimer();
+                }
+                if (_startedJetpack && GameManager.instance
+                    .inputHandler.inputActions.dash.State && firePower > 0.3f * Time.deltaTime)
+                {
+                    firePower -= 0.3f * Time.deltaTime;
+                    _jetpackCycle = true;
+                    //Log("Doing jetpack");
+                    //Jetpack mode
+                    HeroController.instance.AffectedByGravity(false);
+                    HeroController.instance.cState.falling = false;
+                    Vector2 velocity = KnightPhysics.velocity;
+                    velocity = velocity.y + 14f * Time.deltaTime > 6f ? new Vector2(velocity.x, 6f) : new Vector2(velocity.x, velocity.y + 14f * Time.deltaTime);
+                    KnightPhysics.velocity = velocity;
+                } else if (_startedJetpack)
+                {
+                    HeroController.instance.AffectedByGravity(true);
+                    _startedJetpack = false;
+                }
+            } else if (_startedJetpack)
+            {
+                HeroController.instance.AffectedByGravity(true);
+                _startedJetpack = false;
+                _jetpackCycle = false;
+            }
+            
+            if (firePower < 1.0 && HeroController.instance.hero_state == ActorStates.airborne && !_startedJetpack)
             {
                 firePower += Time.deltaTime * 0.2;
                 FireBarImage.fillAmount = (float) firePower;
             }
-            else
+            else if (HeroController.instance.hero_state == ActorStates.airborne && !_startedJetpack)
             {
                 firePower = 1.0;
                 FireBarImage.fillAmount = 1.0f;
+            } else if (firePower > 0.0)
+            {
+                firePower -= Time.deltaTime * 0.4;
+                FireBarImage.fillAmount = (float) firePower;
+            }
+            else
+            {
+                firePower = 0;
+                FireBarImage.fillAmount = 0f;
             }
         }
 
@@ -179,11 +280,13 @@ namespace TriMod.Redwing
             KnightGameObject.transform.position = GhostKnight.transform.position;
             ReflectionHelper.SetAttr<CameraTarget, Transform>(GameManager.instance.cameraCtrl.camTarget,
                 "heroTransform", KnightGameObject.transform);
+            HeroController.instance.ResetAirMoves();
         }
         
 
         private void InstanceOnAttackHook(AttackDirection dir)
         {
+            _isUpSlashing = dir != AttackDirection.normal;
             if (dir == AttackDirection.upward && HeroController.instance.hero_state == ActorStates.airborne && firePower > 0.25 && !_isImmortal)
             {
                 firePower -= 0.25;
@@ -335,6 +438,9 @@ namespace TriMod.Redwing
             SpellControl = FSMUtility.LocateFSM(KnightGameObject, "Spell Control");
             NailArtControl = FSMUtility.LocateFSM(KnightGameObject, "Nail Arts");
             KnightPhysics = KnightGameObject.GetComponent<Rigidbody2D>();
+            //_baseGravityScale = KnightPhysics.gravityScale;
+            //_baseGravityScale = 1f;
+
             setupFlamePillar();
             GhostKnight = new GameObject("GhostKnight", typeof(Rigidbody2D), typeof(SpriteRenderer), typeof(BoxCollider2D), typeof(ghostknight));
             GhostKnight.layer = 0;
