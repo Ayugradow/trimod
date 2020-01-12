@@ -37,6 +37,7 @@ namespace TriMod.Redwing
         public const float FP_X_RANGE = 13;
         public const float FP_Y_RANGE = 6;
         private float _maxfallspeed = -5f;
+        private double ktimer = 0.5;
 
 
         private bool _jetpackCycle = false;
@@ -72,7 +73,9 @@ namespace TriMod.Redwing
             ModHooks.Instance.DashPressedHook += NoDashWhileHoldingUp;
             On.HeroController.JumpReleased += NoVelocityResetOnReleaseWithJetpack;
             On.NailSlash.StartSlash += NailSlashOnStartSlash;
-            On.HeroController.ResetAirMoves += AlsoResetJetpackCycle;
+            ModCommon.ModCommon.OnSpellHook += OverwriteSpells;
+            On.HeroController.CancelHeroJump += DontCancelWithJetpack;
+            On.HeroController.AffectedByGravity += AffectedByGravityIsShit;
 
             canvasObj = CanvasUtil.CreateCanvas(RenderMode.ScreenSpaceOverlay, new Vector2(1920f, 1080f));
             FireBar = CanvasUtil.CreateImagePanel(canvasObj,
@@ -91,18 +94,35 @@ namespace TriMod.Redwing
             StartCoroutine(AddHeroHooks());
         }
 
-        private void AlsoResetJetpackCycle(On.HeroController.orig_ResetAirMoves orig, HeroController self)
+        private void AffectedByGravityIsShit(On.HeroController.orig_AffectedByGravity orig, HeroController self, bool gravityapplies)
         {
-            _jetpackCycle = false;
-            _startedJetpack = false;
+            KnightPhysics.gravityScale = gravityapplies ? self.DEFAULT_GRAVITY : 0f;
+        }
+
+        private void DontCancelWithJetpack(On.HeroController.orig_CancelHeroJump orig, HeroController self)
+        {
+            Vector2 rbvec = KnightPhysics.velocity;
             orig(self);
+            if (_jetpackCycle)
+            {
+                KnightPhysics.velocity = rbvec;
+            }
+        }
+
+        private bool OverwriteSpells(ModCommon.ModCommon.Spell s)
+        {
+            Log("The following spell was casted " + s);
+            return false;
         }
 
         private void NoVelocityResetOnReleaseWithJetpack(On.HeroController.orig_JumpReleased orig, HeroController self)
         {
-            if (!_jetpackCycle)
+            //Log("NoVelocityResetOnReleaseWithJetpack run");
+            Vector2 rbvec = KnightPhysics.velocity;
+            orig(self);
+            if (_jetpackCycle)
             {
-                orig(self);
+                KnightPhysics.velocity = rbvec;
             }
         }
 
@@ -157,6 +177,7 @@ namespace TriMod.Redwing
 
         private void Update()
         {
+            ktimer -= Time.unscaledTime;
             if (HeroController.instance.hero_state == ActorStates.airborne)
             {
                 if (GameManager.instance.inputHandler.inputActions.up.State && KnightPhysics.velocity.y < _maxfallspeed)
@@ -171,19 +192,20 @@ namespace TriMod.Redwing
                     _jetpackCycle = true;
                     //Log("Doing jetpack");
                     //Jetpack mode
-                    HeroController.instance.AffectedByGravity(false);
+                    KnightPhysics.gravityScale = 0f;
                     HeroController.instance.cState.falling = false;
                     Vector2 velocity = KnightPhysics.velocity;
-                    velocity = velocity.y + 14f * Time.deltaTime > 6f ? new Vector2(velocity.x, 6f) : new Vector2(velocity.x, velocity.y + 14f * Time.deltaTime);
+                    velocity = velocity.y + 20f * Time.deltaTime > 15f ? new Vector2(velocity.x, 15f) : new Vector2(velocity.x, velocity.y + 20f * Time.deltaTime);
                     KnightPhysics.velocity = velocity;
                 } else if (_startedJetpack)
                 {
-                    HeroController.instance.AffectedByGravity(true);
+                    KnightPhysics.gravityScale = HeroController.instance.DEFAULT_GRAVITY;
                     _startedJetpack = false;
                 }
             } else if (_startedJetpack)
             {
-                HeroController.instance.AffectedByGravity(true);
+                Log(HeroController.instance.hero_state + " is current hero state");
+                KnightPhysics.gravityScale = HeroController.instance.DEFAULT_GRAVITY;
                 _startedJetpack = false;
                 _jetpackCycle = false;
             }
@@ -207,6 +229,20 @@ namespace TriMod.Redwing
                 firePower = 0;
                 FireBarImage.fillAmount = 0f;
             }
+
+            if (UnityEngine.Input.GetKey(KeyCode.K) && ktimer < 0.0)
+            {
+                ktimer = 0.5;
+                Log("K pressed. Outputting antistorage debug log");
+                StorageDebugLog();
+            }
+        }
+
+        private void StorageDebugLog()
+        {
+            Log("First, jumpvars: ");
+            Log("started jetpack? " + _startedJetpack + ", jetpack cycle? " + _jetpackCycle + "Gravity scale? " + KnightPhysics.gravityScale);
+            Log("Herostate? " + HeroController.instance.hero_state + ", Is falling? " + HeroController.instance.cState.falling + ", Is jumping? " + HeroController.instance.cState.jumping);
         }
 
         private IEnumerator ImmortalFreezeKnight(double time, bool resetVelocity)
@@ -227,7 +263,6 @@ namespace TriMod.Redwing
             }
             _isImmortal = false;
             KnightPhysics.velocity = resetVelocity ? currentVelocity : Vector2.zero;
-            KnightPhysics.gravityScale = currentGravity;
         }
 
         private IEnumerator fadeKnight(double time, double returnTime)
@@ -280,6 +315,10 @@ namespace TriMod.Redwing
             KnightGameObject.transform.position = GhostKnight.transform.position;
             ReflectionHelper.SetAttr<CameraTarget, Transform>(GameManager.instance.cameraCtrl.camTarget,
                 "heroTransform", KnightGameObject.transform);
+            _jetpackCycle = false;
+            _startedJetpack = false;
+            KnightPhysics.gravityScale = HeroController.instance.DEFAULT_GRAVITY;
+            HeroController.instance.cState.falling = true;
             HeroController.instance.ResetAirMoves();
         }
         
