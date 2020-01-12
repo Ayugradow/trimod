@@ -45,7 +45,6 @@ namespace TriMod.Redwing
         private bool _isUpSlashing = false;
         private bool _isEnabled = false;
         private bool _isFocusing = false;
-        private bool _isImmortal = false;
 
         private void Start()
         {
@@ -68,7 +67,6 @@ namespace TriMod.Redwing
             ModHooks.Instance.FocusCostHook += InstanceOnFocusCostHook;
             ModHooks.Instance.BeforeAddHealthHook += InstanceOnBeforeAddHealthHook;
             ModHooks.Instance.AttackHook += InstanceOnAttackHook;
-            ModHooks.Instance.TakeDamageHook += ImmortalCheck;
             ModHooks.Instance.CharmUpdateHook += RedwingLance;
             ModHooks.Instance.DashPressedHook += NoDashWhileHoldingUp;
             On.HeroController.JumpReleased += NoVelocityResetOnReleaseWithJetpack;
@@ -163,18 +161,6 @@ namespace TriMod.Redwing
             //Log("Bounce heights are " + HeroController.instance.BOUNCE_VELOCITY + " for time " + HeroController.instance.BOUNCE_TIME);
         }
 
-        private int ImmortalCheck(ref int hazardtype, int damage)
-        {
-            if (hazardtype == 1)
-            {
-                if (_isImmortal)
-                {
-                    return 0;
-                }
-            }
-            return damage;
-        }
-
         private void Update()
         {
             ktimer -= Time.unscaledTime;
@@ -247,7 +233,7 @@ namespace TriMod.Redwing
 
         private IEnumerator ImmortalFreezeKnight(double time, bool resetVelocity)
         {
-            _isImmortal = true;
+            HeroController.instance.SetDamageMode(1);
             Vector3 currentPos = KnightGameObject.transform.position;
             Vector2 currentVelocity = KnightPhysics.velocity;
             float currentGravity = KnightPhysics.gravityScale;
@@ -261,7 +247,7 @@ namespace TriMod.Redwing
                 yield return null;
                 time -= Time.deltaTime;
             }
-            _isImmortal = false;
+            HeroController.instance.SetDamageMode(0);
             KnightPhysics.velocity = resetVelocity ? currentVelocity : Vector2.zero;
         }
 
