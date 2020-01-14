@@ -17,8 +17,8 @@ namespace TriMod.Redwing
         public static pillardetect PillarDetection;
 
         private GameObject GhostKnight;
-        private GameObject CeilingDetectionObject;
         private ceilingdetect _ceilingdetect;
+        private ceilingdetect _floordetect;
         private SpriteRenderer GhostSprite;
         private Rigidbody2D GhostPhysics;
         private Texture2D GhostImage;
@@ -27,6 +27,8 @@ namespace TriMod.Redwing
         private PlayMakerFSM ProxyFSM;
         private PlayMakerFSM SpellControl;
         private PlayMakerFSM NailArtControl;
+        private GameObject FloorDetectionObject;
+        private GameObject CeilingDetectionObject;
         private GameObject PillarDetectionObject;
         private GameObject FireBar;
         private GameObject canvasObj;
@@ -40,6 +42,7 @@ namespace TriMod.Redwing
         private double ktimer = 0.5;
 
 
+        private bool _knightShouldBeInvuln = false;
         private bool _jetpackCycle = false;
         private bool _startedJetpack = false;
         private bool _isUpSlashing = false;
@@ -107,8 +110,41 @@ namespace TriMod.Redwing
             }
         }
 
+        private IEnumerator Groundpound()
+        {
+            // Groundpound particles and animation go here
+            HeroController.instance.SetDamageMode(1);
+            HeroController.instance.acceptingInput = false;
+            StartCoroutine(ImmortalFreezeKnight(0.2, true));
+            yield return new WaitForSeconds(0.2f);
+            while (!_floordetect.hasCelingAbove())
+            {
+                KnightPhysics.velocity = Vector2.down * 150f;
+                yield return null;
+            }
+            KnightPhysics.velocity = Vector2.zero;
+            SpellControl.Fsm.BroadcastEvent("HERO CAST SPELL", false);
+            SpellControl.Fsm.BroadcastEvent("QUAKE FALL END", false);
+
+            //QUAKE FALL END
+            
+
+            Log("You landed. Doing damage and stuff I guess");
+            HeroController.instance.acceptingInput = true;
+            yield return new WaitForSeconds(0.3f);
+            if (_knightShouldBeInvuln)
+                yield break;
+            HeroController.instance.SetDamageMode(0);
+        }
+
         private bool OverwriteSpells(ModCommon.ModCommon.Spell s)
         {
+            if (s == ModCommon.ModCommon.Spell.Quake && !_floordetect.hasCelingAbove())
+            {
+                Log("Pling, pa!");
+                StartCoroutine(Groundpound());
+            }
+            
             Log("The following spell was casted " + s);
             return false;
         }
@@ -163,7 +199,7 @@ namespace TriMod.Redwing
 
         private void Update()
         {
-            ktimer -= Time.unscaledTime;
+            ktimer -= Time.unscaledDeltaTime;
             if (HeroController.instance.hero_state == ActorStates.airborne)
             {
                 if (GameManager.instance.inputHandler.inputActions.up.State && KnightPhysics.velocity.y < _maxfallspeed)
@@ -229,11 +265,14 @@ namespace TriMod.Redwing
             Log("First, jumpvars: ");
             Log("started jetpack? " + _startedJetpack + ", jetpack cycle? " + _jetpackCycle + "Gravity scale? " + KnightPhysics.gravityScale);
             Log("Herostate? " + HeroController.instance.hero_state + ", Is falling? " + HeroController.instance.cState.falling + ", Is jumping? " + HeroController.instance.cState.jumping);
+            Log("Hitbox details: ");
+            Log("Hitbox x, y is: " + KnightGameObject.GetComponent<BoxCollider2D>().size );
         }
 
         private IEnumerator ImmortalFreezeKnight(double time, bool resetVelocity)
         {
             HeroController.instance.SetDamageMode(1);
+            _knightShouldBeInvuln = true;
             Vector3 currentPos = KnightGameObject.transform.position;
             Vector2 currentVelocity = KnightPhysics.velocity;
             float currentGravity = KnightPhysics.gravityScale;
@@ -249,6 +288,8 @@ namespace TriMod.Redwing
             }
             HeroController.instance.SetDamageMode(0);
             KnightPhysics.velocity = resetVelocity ? currentVelocity : Vector2.zero;
+            _knightShouldBeInvuln = false;
+            KnightPhysics.gravityScale = HeroController.instance.DEFAULT_GRAVITY;
         }
 
         private IEnumerator fadeKnight(double time, double returnTime)
@@ -312,7 +353,7 @@ namespace TriMod.Redwing
         private void InstanceOnAttackHook(AttackDirection dir)
         {
             _isUpSlashing = dir != AttackDirection.normal;
-            if (dir == AttackDirection.upward && HeroController.instance.hero_state == ActorStates.airborne && firePower > 0.25 && !_isImmortal)
+            if (dir == AttackDirection.upward && HeroController.instance.hero_state == ActorStates.airborne && firePower > 0.25 && !_knightShouldBeInvuln)
             {
                 firePower -= 0.25;
                 StartCoroutine(ImmortalFreezeKnight(0.7, false));
@@ -498,10 +539,28 @@ namespace TriMod.Redwing
             cdCollider2D.isTrigger = true;
             Rigidbody2D cdFakePhysics = CeilingDetectionObject.GetComponent<Rigidbody2D>();
             cdFakePhysics.isKinematic = true;
+            
+            // Basically replaces the "CheckCollisionSide" FSM action
+            FloorDetectionObject = new GameObject("FloorDetect", typeof(Rigidbody2D), typeof(SpriteRenderer), typeof(BoxCollider2D), typeof(ceilingdetect), typeof(DebugColliders));
+            FloorDetectionObject.transform.parent = KnightGameObject.transform;
+            FloorDetectionObject.GetComponent<DebugColliders>().zDepth = 0f;
+            FloorDetectionObject.layer = 0;
+            // CheckCollisionSide detects from this distance
+            FloorDetectionObject.transform.localPosition = new Vector3(0f, -0.7f, 0);
+            _floordetect = FloorDetectionObject.GetComponent<ceilingdetect>();
+            BoxCollider2D fCollider2D = FloorDetectionObject.GetComponent<BoxCollider2D>();
+            fCollider2D.size = new Vector2(0.5f, 1.4f);
+            Bounds fbounds = fCollider2D.bounds;
+            fbounds.center = FloorDetectionObject.transform.position;
+            fCollider2D.isTrigger = true;
+            Rigidbody2D fFakePhysics = FloorDetectionObject.GetComponent<Rigidbody2D>();
+            fFakePhysics.isKinematic = true;
+
 
             GhostKnight.layer = 0;
             DontDestroyOnLoad(GhostKnight);
             DontDestroyOnLoad(CeilingDetectionObject);
+            DontDestroyOnLoad(FloorDetectionObject);
             Modding.Logger.LogDebug("Found Spell control and nail art control FSMs");
             //CameraController = GameObject.Find("CameraParent");
             Modding.ReflectionHelper.CacheFields<CameraTarget>();
