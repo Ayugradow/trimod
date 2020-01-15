@@ -3,6 +3,7 @@ using System.Collections;
 using GlobalEnums;
 using HutongGames.PlayMaker;
 using HutongGames.PlayMaker.Actions;
+using InControl;
 using ModCommon;
 using Modding;
 using UnityEngine;
@@ -15,7 +16,7 @@ namespace TriMod.Redwing
     {
         public static GameObject KnightGameObject;
         public static pillardetect PillarDetection;
-
+        
         private GameObject GhostKnight;
         private ceilingdetect _ceilingdetect;
         private ceilingdetect _floordetect;
@@ -48,6 +49,7 @@ namespace TriMod.Redwing
         private bool _isUpSlashing = false;
         private bool _isEnabled = false;
         private bool _isFocusing = false;
+        private bool _isRocketJumping = false;
 
         private void Start()
         {
@@ -77,6 +79,7 @@ namespace TriMod.Redwing
             ModCommon.ModCommon.OnSpellHook += OverwriteSpells;
             On.HeroController.CancelHeroJump += DontCancelWithJetpack;
             On.HeroController.AffectedByGravity += AffectedByGravityIsShit;
+            On.HeroController.Jump += RocketJumpIfRocketJumping;
 
             canvasObj = CanvasUtil.CreateCanvas(RenderMode.ScreenSpaceOverlay, new Vector2(1920f, 1080f));
             FireBar = CanvasUtil.CreateImagePanel(canvasObj,
@@ -93,6 +96,35 @@ namespace TriMod.Redwing
             FireBarImage.fillMethod = Image.FillMethod.Horizontal;
             FireBarImage.fillAmount = (float) firePower;
             StartCoroutine(AddHeroHooks());
+        }
+
+        private void RocketJumpIfRocketJumping(On.HeroController.orig_Jump orig, HeroController self)
+        {
+            if (_isRocketJumping)
+            {
+                int js = ReflectionHelper.GetAttr<HeroController, int>(HeroController.instance,"jump_steps");
+                int jps = ReflectionHelper.GetAttr<HeroController, int>(HeroController.instance,"jumped_steps");
+                if (js <= self.JUMP_STEPS)
+                {
+                    var velocity = KnightPhysics.velocity;
+                    velocity = !self.inAcid
+                        ? new Vector2(velocity.x, self.JUMP_SPEED * 1.8f)
+                        : new Vector2(velocity.x, self.JUMP_SPEED_UNDERWATER * 1.8f);
+                    KnightPhysics.velocity = velocity;
+
+                    js++;
+                    jps++;
+                    ReflectionHelper.SetAttr(HeroController.instance,"jump_steps", js);
+                    ReflectionHelper.SetAttr(HeroController.instance,"jumped_steps", jps);
+                    ReflectionHelper.SetAttr(HeroController.instance,"ledgeBufferSteps", 0);
+                }
+                else
+                    orig(self);
+            }
+            else
+            {
+                orig(self);
+            }
         }
 
         private void AffectedByGravityIsShit(On.HeroController.orig_AffectedByGravity orig, HeroController self, bool gravityapplies)
@@ -115,8 +147,8 @@ namespace TriMod.Redwing
             // Groundpound particles and animation go here
             HeroController.instance.SetDamageMode(1);
             HeroController.instance.acceptingInput = false;
-            StartCoroutine(ImmortalFreezeKnight(0.2, true));
-            yield return new WaitForSeconds(0.2f);
+            StartCoroutine(ImmortalFreezeKnight(0.4, true));
+            yield return new WaitForSeconds(0.4f);
             while (!_floordetect.hasCelingAbove())
             {
                 KnightPhysics.velocity = Vector2.down * 150f;
@@ -131,10 +163,32 @@ namespace TriMod.Redwing
 
             Log("You landed. Doing damage and stuff I guess");
             HeroController.instance.acceptingInput = true;
-            yield return new WaitForSeconds(0.3f);
+            if (GameManager.instance.inputHandler.inputActions.jump.State)
+            {
+                Log("Jump pressed when you landed so doing ROCKET JUMP!!!!");
+                ReflectionHelper.SetAttr(HeroController.instance,"jumpQueueSteps", (int) 0);
+                ReflectionHelper.SetAttr(HeroController.instance,"jumped_steps", (int) 0);
+                ReflectionHelper.SetAttr(HeroController.instance,"jump_steps", (int) 5);
+                HeroController.instance.cState.jumping = true;
+                _isRocketJumping = true;
+
+                StartCoroutine(RocketJumpEffects());
+            }
+            yield return new WaitForSeconds(0.5f);
             if (_knightShouldBeInvuln)
                 yield break;
             HeroController.instance.SetDamageMode(0);
+        }
+
+        private IEnumerator RocketJumpEffects()
+        {
+            while (GameManager.instance.inputHandler.inputActions.jump.State && HeroController.instance.cState.jumping)
+            {
+                // TODO effects
+                yield return null;
+            }
+
+            _isRocketJumping = false;
         }
 
         private bool OverwriteSpells(ModCommon.ModCommon.Spell s)
@@ -484,6 +538,7 @@ namespace TriMod.Redwing
             if (_isEnabled)
             {
                 ModHooks.Instance.FocusCostHook -= InstanceOnFocusCostHook;
+                On.HeroController.Jump -= RocketJumpIfRocketJumping;
                 Destroy(PillarDetectionObject);
                 Destroy(FireBar);
                 Destroy(canvasObj);
@@ -564,6 +619,7 @@ namespace TriMod.Redwing
             Modding.Logger.LogDebug("Found Spell control and nail art control FSMs");
             //CameraController = GameObject.Find("CameraParent");
             Modding.ReflectionHelper.CacheFields<CameraTarget>();
+            ReflectionHelper.CacheFields<HeroController>();
         }
         
         private void setupFlamePillar()
