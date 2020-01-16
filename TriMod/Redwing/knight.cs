@@ -16,8 +16,9 @@ namespace TriMod.Redwing
     {
         public static GameObject KnightGameObject;
         public static pillardetect PillarDetection;
-        
+
         private GameObject GhostKnight;
+        private laserControl KnightLaser; // :)
         private ceilingdetect _ceilingdetect;
         private ceilingdetect _floordetect;
         private SpriteRenderer GhostSprite;
@@ -28,6 +29,7 @@ namespace TriMod.Redwing
         private PlayMakerFSM ProxyFSM;
         private PlayMakerFSM SpellControl;
         private PlayMakerFSM NailArtControl;
+        private GameObject KnightLaserObject;
         private GameObject FloorDetectionObject;
         private GameObject CeilingDetectionObject;
         private GameObject PillarDetectionObject;
@@ -50,6 +52,7 @@ namespace TriMod.Redwing
         private bool _isEnabled = false;
         private bool _isFocusing = false;
         private bool _isRocketJumping = false;
+        private bool _acceptingInput = true;
 
         private void Start()
         {
@@ -63,6 +66,7 @@ namespace TriMod.Redwing
             Destroy(canvasObj);
             Destroy(GhostKnight);
             Destroy(CeilingDetectionObject);
+            Destroy(KnightLaserObject);
         }
 
         public void EnableRedwing()
@@ -129,7 +133,14 @@ namespace TriMod.Redwing
 
         private void AffectedByGravityIsShit(On.HeroController.orig_AffectedByGravity orig, HeroController self, bool gravityapplies)
         {
-            KnightPhysics.gravityScale = gravityapplies ? self.DEFAULT_GRAVITY : 0f;
+            if (KnightPhysics != null && self != null)
+                KnightPhysics.gravityScale = gravityapplies ? self.DEFAULT_GRAVITY : 0f;
+            else
+            {
+                Log("Something has gone terribly wrong. Let's reset you. ");
+                orig(HeroController.instance, gravityapplies); // yuck
+            }
+
         }
 
         private void DontCancelWithJetpack(On.HeroController.orig_CancelHeroJump orig, HeroController self)
@@ -147,14 +158,24 @@ namespace TriMod.Redwing
             // Groundpound particles and animation go here
             HeroController.instance.SetDamageMode(1);
             HeroController.instance.acceptingInput = false;
+            KnightLaser.DrawRay();
             StartCoroutine(ImmortalFreezeKnight(0.4, true));
             yield return new WaitForSeconds(0.4f);
             while (!_floordetect.hasCelingAbove())
             {
+                HeroController.instance.SetDamageMode(1);
+                KnightLaser.DrawRay();
                 KnightPhysics.velocity = Vector2.down * 150f;
+                if (KnightPhysics.gravityScale < 0.78f || HeroController.instance.cState.falling == false)
+                {
+                    KnightPhysics.gravityScale = 0.78f;
+                    HeroController.instance.cState.falling = true;
+                    HeroController.instance.CancelHeroJump();
+                }
                 yield return null;
             }
             KnightPhysics.velocity = Vector2.zero;
+            KnightLaser.UndrawRay();
             SpellControl.Fsm.BroadcastEvent("HERO CAST SPELL", false);
             SpellControl.Fsm.BroadcastEvent("QUAKE FALL END", false);
 
@@ -163,6 +184,7 @@ namespace TriMod.Redwing
 
             Log("You landed. Doing damage and stuff I guess");
             HeroController.instance.acceptingInput = true;
+            _acceptingInput = true;
             if (GameManager.instance.inputHandler.inputActions.jump.State)
             {
                 Log("Jump pressed when you landed so doing ROCKET JUMP!!!!");
@@ -193,8 +215,9 @@ namespace TriMod.Redwing
 
         private bool OverwriteSpells(ModCommon.ModCommon.Spell s)
         {
-            if (s == ModCommon.ModCommon.Spell.Quake && !_floordetect.hasCelingAbove())
+            if (s == ModCommon.ModCommon.Spell.Quake && !_floordetect.hasCelingAbove() && _acceptingInput)
             {
+                _acceptingInput = false;
                 Log("Pling, pa!");
                 StartCoroutine(Groundpound());
             }
@@ -254,7 +277,7 @@ namespace TriMod.Redwing
         private void Update()
         {
             ktimer -= Time.unscaledDeltaTime;
-            if (HeroController.instance.hero_state == ActorStates.airborne)
+            if (HeroController.instance.hero_state == ActorStates.airborne && _acceptingInput)
             {
                 if (GameManager.instance.inputHandler.inputActions.up.State && KnightPhysics.velocity.y < _maxfallspeed)
                 {
@@ -390,6 +413,7 @@ namespace TriMod.Redwing
             }
 
             HeroController.instance.acceptingInput = true;
+            _acceptingInput = true;
             GhostSprite.color = Color.clear;
             GhostImage = textures.WarpSprites[0];
             GhostPhysics.velocity = Vector2.zero;
@@ -407,8 +431,9 @@ namespace TriMod.Redwing
         private void InstanceOnAttackHook(AttackDirection dir)
         {
             _isUpSlashing = dir != AttackDirection.normal;
-            if (dir == AttackDirection.upward && HeroController.instance.hero_state == ActorStates.airborne && firePower > 0.25 && !_knightShouldBeInvuln)
+            if (dir == AttackDirection.upward && HeroController.instance.hero_state == ActorStates.airborne && firePower > 0.25 && !_knightShouldBeInvuln && _acceptingInput)
             {
+                _acceptingInput = false;
                 firePower -= 0.25;
                 StartCoroutine(ImmortalFreezeKnight(0.7, false));
                 GhostKnight.transform.position = KnightGameObject.transform.position;
@@ -416,7 +441,6 @@ namespace TriMod.Redwing
                 GhostSprite.color = Color.white;
                 StartCoroutine(TeleportToGhost(0.7));
                 StartCoroutine(fadeKnight(0.4, 0.7));
-
                 Log("You're airborne and you did an upslash enjoy your cool teleport power");
             }
             Log("Player attacked with direction " + dir);
@@ -544,6 +568,7 @@ namespace TriMod.Redwing
                 Destroy(canvasObj);
                 Destroy(GhostKnight);
                 Destroy(CeilingDetectionObject);
+                Destroy(KnightLaserObject);
                 _isEnabled = false;
             }
         }
@@ -610,9 +635,15 @@ namespace TriMod.Redwing
             fCollider2D.isTrigger = true;
             Rigidbody2D fFakePhysics = FloorDetectionObject.GetComponent<Rigidbody2D>();
             fFakePhysics.isKinematic = true;
-
-
+            
+            KnightLaserObject = new GameObject("LaserGenerator", typeof(laserControl), typeof(LineRenderer));
+            KnightLaserObject.transform.position = KnightGameObject.transform.position;
+            KnightLaserObject.transform.parent = KnightGameObject.transform;
+            KnightLaser = KnightLaserObject.GetComponent<laserControl>();
+            KnightLaser.lr = KnightLaserObject.GetComponent<LineRenderer>();
+            
             GhostKnight.layer = 0;
+            DontDestroyOnLoad(KnightLaserObject);
             DontDestroyOnLoad(GhostKnight);
             DontDestroyOnLoad(CeilingDetectionObject);
             DontDestroyOnLoad(FloorDetectionObject);

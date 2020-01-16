@@ -215,6 +215,7 @@
     <Compile Include="Redwing\firepillar.cs" />
     <Compile Include="Redwing\ghostknight.cs" />
     <Compile Include="Redwing\knight.cs" />
+    <Compile Include="Redwing\laserControl.cs" />
     <Compile Include="Redwing\objectspawner.cs" />
     <Compile Include="Redwing\pillardetect.cs" />
     <Compile Include="Redwing\textures.cs" />
