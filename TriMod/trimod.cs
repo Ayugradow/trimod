@@ -66,11 +66,12 @@ namespace TriMod
 			}
 
 			// Uncomment for void.
-			gm.gameObject.AddComponent<Blackmoth.Berserker>();
+			//gm.gameObject.AddComponent<Blackmoth.Berserker>();
 			
 			// Uncomment for Redwing.
 //			Redwing.Knight rk = gm.gameObject.AddComponent<Redwing.Knight>();
 //			rk.EnableRedwing();
+			gm.gameObject.AddComponent<health.newhealthmanager>();
 		}
 
 		public void SetupGameRefs(int id)
