@@ -75,7 +75,7 @@ namespace TriMod.health
             Redwing.Knight.Log("HP before dmg is " + trueHealth);
             Redwing.Knight.Log("trueImmortalityTimer is " + trueImmortalityTimer);
             trueHealth -= trueDamage;
-            if (trueHealth < 0)
+            if (trueHealth <= 0)
             {
                 connectedHM.Die(ogHit.Direction, at, true);
                 return true;

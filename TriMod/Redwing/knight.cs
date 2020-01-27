@@ -333,6 +333,11 @@ namespace TriMod.Redwing
                 ktimer = 0.5;
                 Log("K pressed. Outputting antistorage debug log");
                 StorageDebugLog();
+            } else if (UnityEngine.Input.GetKey(KeyCode.L) && ktimer < 0.0)
+            {
+                ktimer = 0.3;
+                Log("L pressed. Hurting all enemies by 0.4 damage...");
+                health.newhealthmanager.hurtAllEnemies(gameObject, 0.4);
             }
         }
 
