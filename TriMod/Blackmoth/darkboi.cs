@@ -5,7 +5,7 @@ using Reflection = Modding.ReflectionHelper;
 using Modding;
 using Logger = Modding.Logger;
 
-namespace TriMod
+namespace TriMod.Blackmoth
 {
 	public class Berserker : MonoBehaviour
 	{

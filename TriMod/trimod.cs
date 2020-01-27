@@ -12,13 +12,13 @@ namespace TriMod
 
 		public override void Initialize()
 		{
-			LogDebug("Bonfire Mod initializing!");
+			LogDebug("TriMod initializing!");
 
 			ModHooks.Instance.NewGameHook += SetupGameRefs;
 			ModHooks.Instance.SavegameLoadHook += SetupGameRefs;
 //			UnityEngine.SceneManagement.SceneManager.sceneLoaded += SceneManager_sceneLoaded;
 
-			LogDebug("Bonfire Mod v." + GetVersion() + " initialized!");
+			LogDebug("TriMod v." + GetVersion() + " initialized!");
 		}
 
 		private void SceneManager_sceneLoaded(Scene arg0, LoadSceneMode arg1)
@@ -66,11 +66,11 @@ namespace TriMod
 			}
 
 			// Uncomment for void.
-			// gm.gameObject.AddComponent<Berserker>();
+			gm.gameObject.AddComponent<Blackmoth.Berserker>();
 			
 			// Uncomment for Redwing.
-			Redwing.Knight rk = gm.gameObject.AddComponent<Redwing.Knight>();
-			rk.EnableRedwing();
+//			Redwing.Knight rk = gm.gameObject.AddComponent<Redwing.Knight>();
+//			rk.EnableRedwing();
 		}
 
 		public void SetupGameRefs(int id)
