@@ -2,7 +2,6 @@ using System;
 using System.IO;
 using System.Reflection;
 using UnityEngine;
-using Debug = System.Diagnostics.Debug;
 
 namespace TriMod.Redwing
 {
