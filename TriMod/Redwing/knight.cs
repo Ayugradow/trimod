@@ -181,7 +181,6 @@ namespace TriMod.Redwing
 
             //QUAKE FALL END
             
-
             Log("You landed. Doing damage and stuff I guess");
             HeroController.instance.acceptingInput = true;
             _acceptingInput = true;

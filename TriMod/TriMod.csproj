@@ -211,6 +211,8 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="health\newhealth.cs" />
+    <Compile Include="health\newhealthmanager.cs" />
     <Compile Include="Redwing\ceilingdetect.cs" />
     <Compile Include="Redwing\firepillar.cs" />
     <Compile Include="Redwing\ghostknight.cs" />
